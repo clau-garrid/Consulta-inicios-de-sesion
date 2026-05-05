@@ -1,0 +1,41 @@
+Cargar interfaz gráfica de .NET
+
+Add-Type -AssemblyName Microsoft.VisualBasic
+
+Pedir el nombre de usuario mediante una ventana emergente
+
+$User = [Microsoft.VisualBasic.Interaction]::InputBox("Escriba el nombre de usuario (ej: AA01):", "Buscador de Sesiones", "")
+
+Si el usuario cancela o deja vacío, salir
+
+if ([string]::IsNullOrWhiteSpace($User)) { exit }
+
+Pedir el rango de días
+
+$DaysInput = [Microsoft.VisualBasic.Interaction]::InputBox("¿Cuántos días hacia atrás buscar?", "Rango de búsqueda", "7")
+$Days = [int]$DaysInput
+
+Configurar el filtro XPath (Súper rápido)
+
+$FilterXml = @"
+
+
+
+*[System[(EventID=4624 or EventID=4634) and TimeCreated[timediff(@SystemTime) <= $($Days * 86400000)]]]
+and
+*[EventData[Data[@Name='TargetUserName']='$User']]
+
+
+
+"@
+Write-Host "Buscando registros para '$User' en los últimos $Days días... por favor espere." -ForegroundColor Cyan
+try {
+# Obtener eventos y mostrarlos en una tabla filtrable
+Get-WinEvent -FilterXml $FilterXml -ErrorAction Stop | Select-Object TimeCreated,
+@{Name='Accion'; Expression={if($.Id -eq 4624) {'ENTRADA (4624)'} else {'SALIDA (4634)'}}},
+@{Name='Dominio'; Expression={$.Properties[6].Value}},
+@{Name='Usuario'; Expression={$.Properties[5].Value}},
+@{Name='Tipo_Logon'; Expression={$.Properties[8].Value}} |
+Out-GridView -Title "Resultados para $User - Últimos $Days días"
+} catch {
+[System.Windows.MessageBox]::Show("No se encontraron registros para el usuario '$User' en este equipo durante los últimos $Days días.", "Sin resultados")
